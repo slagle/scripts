@@ -1,0 +1,23 @@
+#!/bin/bash
+
+set -eux
+
+VM_NAME=$1
+SNAPSHOT_NAME=$2
+REUSE=${3:-""}
+
+virsh destroy $VM_NAME || true
+virsh snapshot-revert --paused $VM_NAME $SNAPSHOT_NAME
+virsh destroy $VM_NAME
+virsh restore --paused /storage/libvirt/snapshots/$VM_NAME.$SNAPSHOT_NAME.mem.qcow2
+
+if [ "$REUSE" = "reuse" ]; then
+    virsh snapshot-delete --metadata $VM_NAME $SNAPSHOT_NAME
+    sudo rm -f /storage/libvirt/snapshots/$VM_NAME.$SNAPSHOT_NAME.mem.qcow2
+    sudo rm -f /storage/libvirt/snapshots/$VM_NAME.$SNAPSHOT_NAME.disk.qcow2
+    snap-vm $VM_NAME $SNAPSHOT_NAME
+else
+    snap-vm $VM_NAME $SNAPSHOT_NAME.$(date +%s) 
+fi
+
+virsh resume $VM_NAME

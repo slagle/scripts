@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -eux
+
+VM_NAME=$1
+SNAPSHOT_NAME=$2
+REUSE=${3:-""}
+
+if [ "$REUSE" = "reuse" ]; then
+    virsh suspend $VM_NAME
+    sudo rm -f /storage/libvirt/snapshots/$VM_NAME.$SNAPSHOT_NAME.mem.qcow2
+    virsh save --paused $VM_NAME /storage/libvirt/snapshots/$VM_NAME.$SNAPSHOT_NAME.mem.qcow2
+    backing_file=$(sudo qemu-img info /storage/libvirt/snapshots/$VM_NAME.$SNAPSHOT_NAME.disk.qcow2 | grep "backing file:" | awk '{print $3}')
+    sudo qemu-img commit /storage/libvirt/snapshots/$VM_NAME.$SNAPSHOT_NAME.disk.qcow2
+    sudo qemu-img create -f qcow2 -b $backing_file /storage/libvirt/snapshots/$VM_NAME.$SNAPSHOT_NAME.disk.qcow2
+    virsh restore --paused /storage/libvirt/snapshots/$VM_NAME.$SNAPSHOT_NAME.mem.qcow2
+    virsh resume $VM_NAME
+    exit
+fi
+
+time \
+virsh snapshot-create-as \
+    --domain $VM_NAME $SNAPSHOT_NAME \
+    --diskspec vda,file=/storage/libvirt/snapshots/$VM_NAME.$SNAPSHOT_NAME.disk.qcow2,snapshot=external \
+    --memspec file=/storage/libvirt/snapshots/$VM_NAME.$SNAPSHOT_NAME.mem.qcow2,snapshot=external \
+    --atomic \
+    --live
